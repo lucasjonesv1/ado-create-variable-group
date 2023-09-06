@@ -1,39 +1,54 @@
 param(
     [String]$pat,
-    [String]$org_name,
-    [String]$group_name,
-    [String]$project_name,
     [Int32]$create = 0
 )
 
-try {
-    # Log in to az cli using pat
-    Write-Output $pat | az devops login --organization $org_name
-    Write-Host "az cli login succeeded" -ForegroundColor Green
+$ErrorActionPreference = 'Stop'
+
+# Import JSON to PS object, create org and project names
+$service_request_input = Get-Content -Raw -Path test.json | ConvertFrom-Json
+$org_name = $service_request_input.org_name
+$project_name = $service_request_input.project_name
+
+Write-Output $pat | az devops login --organization $org_name
+if (!$?) {
+    Write-Host "Error logging in" -ForegroundColor Red
+    Exit
 }
-catch {
-    Write-Host "az cli login failed!" -ForegroundColor Red
+else {
+    Write-Host "az cli login succeeded" -ForegroundColor Green
 }
 
 # Create an array from a list of all groups in projects
-$groups = az pipelines variable-group list --project $project_name | ConvertFrom-Json
 $group_list = @()
-
-foreach ($group in $groups) {
-    $group_list.Add($group.name)
+foreach ($group in az pipelines variable-group list --project $project_name | ConvertFrom-Json) {
+    $group_list += $group.name
 }
 
-# Check if group already exists, error if it does
-if ($group_list.Contains($group_name)) {
-    Write-Host "Group already exists, please choose another name." -ForegroundColor Red
-}
+foreach ($group_to_create in $service_request_input.groups) {
+    if ($group_list.Contains($group_to_create.name)) {
+        Write-Host "Error: Library $($group_to_create.name) already exists, please use another name." -ForegroundColor Red
 
-else {
-    if ($create -eq 1) {
-        Write-Host "Create flag set to true, creating group now." -ForegroundColor Yellow
-        az pipelines variable-group create --name $group_name --variables environment=$($project_name.ToLower()) --organization $org_name --project $project_name
+        foreach ($variable in $group_to_create.desired_variables.PSObject.Properties) {
+            Write-Host "Would have created variable $($variable.Name) with value $($variable.Value)" -ForegroundColor DarkYellow
+        }
     }
-    elseif ($create -ne 1) {
-        Write-Host "Create flag set to false, not creating group." -ForegroundColor Yellow
+    else {
+        if ($create -eq 1) {
+            Write-Host ("Create flag set to true, creating group {0} now" -f $group_to_create.name) -ForegroundColor Green
+            $created_group = az pipelines variable-group create --name $group_to_create.name --variables project-name=$($project_name.ToUpper()) --organization $org_name --project $project_name | ConvertFrom-Json
+
+            foreach ($variable in $group_to_create.desired_variables.PSObject.Properties) {
+                Write-Host "Creating variable $($variable.Name) with value $($variable.Value)" -ForegroundColor Green
+                az pipelines variable-group variable create --group-id $created_group.Id --name $variable.Name --value $variable.Value --organization $org_name --project $project_name --output none
+            }
+        }
+        elseif ($create -ne 1) {
+            Write-Host ("Create flag set to false, not creating group {0}" -f $group_to_create.name) -ForegroundColor Red
+
+            foreach ($variable in $group_to_create.desired_variables.PSObject.Properties) {
+                Write-Host "Would have created variable $($variable.Name) with value $($variable.Value)" -ForegroundColor DarkYellow
+            }
+        }
     }
 }
