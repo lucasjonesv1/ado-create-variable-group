@@ -28,7 +28,6 @@ foreach ($group in az pipelines variable-group list --project $project_name | Co
 foreach ($group_to_create in $service_request_input.groups) {
     if ($group_list.Contains($group_to_create.name)) {
         Write-Host "Error: Library $($group_to_create.name) already exists, please use another name." -ForegroundColor Red
-
         foreach ($variable in $group_to_create.desired_variables.PSObject.Properties) {
             Write-Host "Would have created variable $($variable.Name) with value $($variable.Value)" -ForegroundColor DarkYellow
         }
@@ -37,7 +36,6 @@ foreach ($group_to_create in $service_request_input.groups) {
         if ($create -eq 1) {
             Write-Host ("Create flag set to true, creating group {0} now" -f $group_to_create.name) -ForegroundColor Green
             $created_group = az pipelines variable-group create --name $group_to_create.name --variables project-name=$($project_name.ToUpper()) --organization $org_name --project $project_name | ConvertFrom-Json
-
             foreach ($variable in $group_to_create.desired_variables.PSObject.Properties) {
                 Write-Host "Creating variable $($variable.Name) with value $($variable.Value)" -ForegroundColor Green
                 az pipelines variable-group variable create --group-id $created_group.Id --name $variable.Name --value $variable.Value --organization $org_name --project $project_name --output none
@@ -45,7 +43,6 @@ foreach ($group_to_create in $service_request_input.groups) {
         }
         elseif ($create -ne 1) {
             Write-Host ("Create flag set to false, not creating group {0}" -f $group_to_create.name) -ForegroundColor Red
-
             foreach ($variable in $group_to_create.desired_variables.PSObject.Properties) {
                 Write-Host "Would have created variable $($variable.Name) with value $($variable.Value)" -ForegroundColor DarkYellow
             }
